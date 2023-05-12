@@ -1,13 +1,8 @@
 import json
-import random
 import socket
 import threading
 import time
 import hashlib
-
-from Block import Block
-from Script import Script
-from Transaction import Transaction
 
 
 class Node:
@@ -16,15 +11,11 @@ class Node:
         self.port = options.get("port", 0)
         self.node_name = options.get("node_name", str((self.host, self.port)))
         self.max_listens = options.get("max_listens", 1024 ** 2)
-        self.block_min_transactions = options.get("block_min_transactions", 5)
         self.max_recv_size = options.get("max_recv_size", 1024 ** 2)
         self.logging_level = options.get("logging_level", 1)
-        self.debug_mode = options.get("debug_mode", False)
         self.outgoing_socket = None
         self.incoming_socket = None
-        self.hash_history = []
-        self.transactions = []
-        self.blockchain = []
+        self.hash_history = set()
         self.known_nodes = options.get("known_nodes", set())
         self.lock = threading.Lock()
         self.listen()
@@ -43,18 +34,16 @@ class Node:
             if self.logging_level >= 1:
                 Node.print(f"Node {self.node_name} is listening on {self.incoming_socket.getsockname()}.")
             threading.Thread(target=self.__accept_connections, daemon=True).start()
-            # Add mining thread with a difficulty of 4
-            threading.Thread(target=self.mine, args=(4,), daemon=True).start()
         return self
 
     def send(self, data, data_type, receiver=None, sender=None, data_hash=None, timestamp=None):
         if timestamp is None:
-            timestamp = time.time()
+            timestamp = time.time_ns()
         if sender is None:
             sender = self.host, self.port
         payload_hash = hashlib.sha256(repr(
             (data_type, data, sender, receiver, timestamp)).encode()).hexdigest() if data_hash is None else data_hash
-        self.hash_history.append(payload_hash)
+        self.hash_history.add(payload_hash)
         payload = {"hash": payload_hash, "type": data_type, "sender": sender, "sent_at": timestamp,
                    "receiver": receiver, "data": data}
         payload = json.dumps(payload)
@@ -65,18 +54,6 @@ class Node:
                 if self.logging_level >= 3:
                     Node.print(f"Node {self.node_name} sent payload to {known_node} : {payload}.")
                 self.__disconnect()
-
-    def mine(self, difficulty):
-        while True:
-            if len(self.transactions) >= self.block_min_transactions:
-                previous_hash = self.blockchain[-1].hash() if len(self.blockchain) > 0 else "0" * 64
-                new_block = Block(self.transactions, previous_hash)
-                new_block.nonce = random.randint(0, 2**32)
-                while not new_block.hash().startswith("0" * difficulty):
-                    new_block.nonce += 1
-                self.blockchain.append(new_block)
-                self.transactions = []
-                self.send(new_block, "mined_block")
 
     def __connect_and_send(self, node, payload):
         try:
@@ -146,34 +123,14 @@ class Node:
                 with self.lock:
                     self.known_nodes.add(n)
         elif data_type == "transaction":
-            data = payload.get("data")
-            transaction = Transaction(data["inputs"], data["outputs"])
-
-            if Node.execute_transaction(transaction):
-                self.transactions.append(transaction)
+            self.handle_incoming_transaction(payload, addr)
         elif data_type == "mined_block":
-            data = payload.get("data")
-            transactions, previous_hash, nonce = data
-            block = Block(transactions, previous_hash)
-            block.nonce = nonce
-            self.blockchain.append(block)
+            self.handle_incoming_mined_block(payload, addr)
         else:
             pass
 
     def __repr__(self):
         return str((self.node_name, (self.host, self.port)))
-
-    @staticmethod
-    def execute_transaction(transaction):
-        for tx_input, tx_output in zip(transaction.inputs, transaction.outputs):
-            unlocking_script = Script(tx_input["unlocking_script"])
-            locking_script = Script(tx_output["locking_script"])
-            stack = []
-
-            if not unlocking_script.execute(stack) or not locking_script.execute(stack):
-                return False
-
-        return True
 
     @staticmethod
     def wait(*nodes):
