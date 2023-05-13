@@ -30,7 +30,7 @@ def test_exercise_2():
         inputs=[{"unlocking_script": "OP_DUP OP_HASH160"}],
         outputs=[{"locking_script": "OP_DUP OP_HASH160 OP_EQUALVERIFY"}]
     )
-    node1.send(tx, "transaction")
+    node1._send(tx, "transaction")
 
     # Give some time for the transaction to broadcast
     time.sleep(1)
@@ -51,7 +51,7 @@ def test_exercise_3():
             inputs=[{"unlocking_script": "OP_DUP OP_HASH160"}],
             outputs=[{"locking_script": "OP_DUP OP_HASH160 OP_EQUALVERIFY"}]
         )
-        node1.send(tx, "transaction")
+        node1._send(tx, "transaction")
         time.sleep(0.5)
 
     # Give some time for mining and broadcasting
