@@ -77,21 +77,21 @@ class Node:
         self.outgoing_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.outgoing_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.outgoing_socket.connect((host, port))
-        if self.logging_level >= 2:
+        if self.logging_level >= 3:
             Node.print(f"Node {self.node_name} is connected to {(host, port)}.")
         return self.outgoing_socket
 
     def _disconnect(self):
         self.outgoing_socket.shutdown(socket.SHUT_RDWR)
         self.outgoing_socket.close()
-        if self.logging_level >= 2:
+        if self.logging_level >= 3:
             Node.print(f"Node {self.node_name} is disconnected.")
         return self
 
     def _accept_connections(self):
         while True:
             conn, addr = self.incoming_socket.accept()
-            if self.logging_level >= 2:
+            if self.logging_level >= 3:
                 Node.print(f"Node {self.node_name} accepted a connection from {addr}.")
             threading.Thread(target=self._handle_conn, args=(conn, addr), daemon=True).start()
 
@@ -116,7 +116,7 @@ class Node:
                 self._send(data, data_type, receiver=tuple(receiver), sender=tuple(sender), data_hash=data_hash,
                            timestamp=timestamp)
                 return
-            if self.logging_level >= 1:
+            if self.logging_level >= 2:
                 Node.print(f"Node {self.node_name} received valid payload from {addr} : {payload}.")
         except ValueError:
             if self.logging_level >= 0:
@@ -184,6 +184,7 @@ class Node:
             'outputs': outputs,
         })
         self._send(transaction.as_dict(), "transaction")
+        Node.print(f"Node {self.node_name} sent a transaction : {transaction.as_dict()}")
         return transaction
 
     def __repr__(self):

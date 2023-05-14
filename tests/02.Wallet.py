@@ -16,6 +16,6 @@ wallet.create_transaction(inputs=[], outputs=[])
 # Give some time for the transaction to broadcast
 while True:
     time.sleep(1)
-    if miner_1.transactions == miner_2.transactions:
+    if miner_1.transaction_pool == miner_2.transaction_pool:
         break
-assert len(miner_1.transactions) == 1
+assert len(miner_1.transaction_pool) == 1

@@ -1,22 +1,24 @@
 import hashlib
 import time
 
+from MerkleTree import MerkleTree
 from Transaction import Transaction
 
 
 class Block:
-    def __init__(self, transactions, previous_hash, **options):
+    def __init__(self, i, transactions, previous_hash, **options):
+        self.index = i
         self.h = options.get("hash", None)
         self.previous_hash = previous_hash
         self.timestamp = options.get("timestamp", time.time_ns())
         self.nonce = options.get("nonce", 0)
-        self.transactions = list(map(lambda x: Transaction(x), transactions))
+        self.merkle_tree = MerkleTree(transactions)
 
     def __str__(self):
-        return str((self.previous_hash, self._get_transactions_as_dicts(), self.nonce, self.timestamp))
+        return str((self.index, self.previous_hash, self.merkle_tree.get_root().hash, self.nonce, self.timestamp))
 
     def __repr__(self):
-        return str((self.h, self.previous_hash, self.nonce, self.timestamp))
+        return str((self.index, self.h, self.previous_hash, self.nonce, self.timestamp))
 
     def __eq__(self, other):
         res = True
@@ -33,8 +35,8 @@ class Block:
 
     def as_dict(self):
         block_dict = self.__dict__.copy()
-        block_dict["transactions"] = self._get_transactions_as_dicts()
+        block_dict["merkle_tree"] = self.merkle_tree.as_dict()
         return block_dict
 
-    def _get_transactions_as_dicts(self):
-        return list(map(lambda x: x.as_dict(), self.transactions))
+    def transactions(self):
+        return self.merkle_tree.transactions

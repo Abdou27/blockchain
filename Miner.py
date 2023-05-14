@@ -12,7 +12,8 @@ class Miner(Node):
     def __init__(self, **options):
         super().__init__(**options)
         self.block_min_transactions = options.get("block_min_transactions", 2)
-        self.transactions = []
+        self.stop_mining = False
+        self.transaction_pool = []
         self.blockchain = []
         self.utxos = {}
         # Add mining thread with a difficulty of 4
@@ -20,24 +21,21 @@ class Miner(Node):
 
     def _mine(self, difficulty):
         while True:
-            if len(self.transactions) >= self.block_min_transactions:
+            if not self.stop_mining and len(self.transaction_pool) >= self.block_min_transactions:
+
                 previous_hash = self.blockchain[-1].hash() if len(self.blockchain) > 0 else "0" * 64
-                new_block = Block(self.transactions, previous_hash)
+                new_block = Block(len(self.blockchain), self.transaction_pool, previous_hash)
                 new_block.nonce = random.randint(0, 2 ** 32)
-
-                # Add a transaction fee for the miner
-                transaction_fee = 50
-
                 # Create a coinbase transaction for the mining reward
+                transaction_fee = 50
                 coinbase_transaction = self._create_reward_transaction(transaction_fee)
-
-                # Add the reward transaction to the list of transactions to be included in the block
-                new_block.transactions.insert(0, coinbase_transaction)
+                new_block.merkle_tree.transactions.insert(0, coinbase_transaction)
+                new_block.merkle_tree.build_tree()
 
                 while not new_block.hash().startswith("0" * difficulty):
                     # Check if the transactions in the new_block are still in the miner's transactions list
-                    if not all(tx in self.transactions for tx in
-                               new_block.transactions[1:]):  # Skip the coinbase transaction
+                    if self.stop_mining or not all(tx in self.transaction_pool for tx in
+                               new_block.merkle_tree.transactions[1:]):  # Skip the coinbase transaction
                         break
                     new_block.nonce += 1
 
@@ -45,8 +43,8 @@ class Miner(Node):
                     # Add the mined block to the blockchain and broadcast it
                     self.blockchain.append(new_block)
                     self._update_utxos_from_blockchain()
-                    self.transactions = [tx for tx in self.transactions if
-                                         tx not in new_block.transactions[1:]]  # Remove non-coinbase transactions
+                    self.transaction_pool = [tx for tx in self.transaction_pool if
+                                             tx not in new_block.merkle_tree.transactions[1:]]
                     Node.print(f"Node {self.node_name} successfully mined a block : {new_block.as_dict()}")
                     self._send(new_block.as_dict(), "mined_block")
 
@@ -71,18 +69,20 @@ class Miner(Node):
         data = payload.get("data")
         transaction = Transaction(data)
         if transaction.execute():
-            self.transactions.append(transaction)
+            self.transaction_pool.append(transaction)
 
     def _handle_incoming_mined_block(self, payload, addr):
         data = payload.get("data")
-        transactions, previous_hash, nonce = data['transactions'], data['previous_hash'], data['nonce']
-        timestamp = data['timestamp']
-        block = Block(transactions, previous_hash, nonce=nonce, timestamp=timestamp)
+        index, timestamp, previous_hash, nonce = data['index'], data['timestamp'], data['previous_hash'], data['nonce']
+        transactions = data['merkle_tree']['transactions']
+        block = Block(index, transactions, previous_hash, nonce=nonce, timestamp=timestamp)
 
         # Check if the received block is valid
         if self._is_valid_block(block):
+            self.stop_mining = True
+
             # Update UTXOs
-            for tx in block.transactions:
+            for tx in block.merkle_tree.transactions:
                 tx_hash = tx.hash()
                 for i, tx_output in enumerate(tx.outputs):
                     self.utxos[f"{tx_hash}:{i}"] = tx_output
@@ -94,16 +94,42 @@ class Miner(Node):
 
             # Check if the received block's transactions are in the miner's current transaction list
             for tx in transactions:
-                if tx in self.transactions:
-                    self.transactions.remove(tx)
+                if tx in self.transaction_pool:
+                    self.transaction_pool.remove(tx)
 
             # Add the block to the blockchain
             self.blockchain.append(block)
             self._update_utxos_from_blockchain()
-
-        else:
-            # If the block is not valid, request the latest blockchain from other nodes to update the local blockchain
+            self.stop_mining = False
+        elif block.index >= len(self.blockchain):
+            # This block is ahead of the current block, request an update
             self.request_blockchain_update()
+        else:
+            # This block is invalid because the current blockchain has already surpassed it, do nothing
+            pass
+
+    def _handle_incoming_blockchain_request(self, payload, addr):
+        # Send the current blockchain to the requesting node
+        serialized_blockchain = [block.as_dict() for block in self.blockchain]
+        self._send(serialized_blockchain, "blockchain_update", receiver=payload["sender"])
+
+    def _handle_incoming_blockchain_update(self, payload, addr):
+        data = payload.get("data")
+        received_blockchain = [Block(block['index'], block["merkle_tree"]["transactions"], block["previous_hash"],
+                                     nonce=block["nonce"], timestamp=block["timestamp"]) for block in data]
+
+        # Compare the length of the received blockchain with the local blockchain
+        if len(received_blockchain) > len(self.blockchain):
+            # If the received blockchain is longer, update the local blockchain
+            self.blockchain = received_blockchain
+            self._update_utxos_from_blockchain()
+
+    def _handle_incoming_utxos_request(self, payload, addr):
+        address = payload.get("data")
+        # Find the UTXOs that belong to the miner and have not been spent
+        utxos = {utxo_id: utxo for utxo_id, utxo in self.utxos.items() if
+                           utxo["locking_script"] == self.generate_locking_script(address)}
+        self._send(utxos, 'utxos_response', receiver=tuple(payload.get('sender')))
 
     def _is_valid_block(self, block):
         # Check if the block's previous hash matches the hash of the last block in the current blockchain
@@ -120,36 +146,13 @@ class Miner(Node):
     def request_blockchain_update(self):
         # Broadcast a request for the latest blockchain
         self._send(self.id(), "request_blockchain")
-
-    def _handle_incoming_blockchain_request(self, payload, addr):
-        # Send the current blockchain to the requesting node
-        serialized_blockchain = [block.as_dict() for block in self.blockchain]
-        self._send(serialized_blockchain, "blockchain_update", receiver=payload["sender"])
-
-    def _handle_incoming_blockchain_update(self, payload, addr):
-        data = payload.get("data")
-        received_blockchain = [
-            Block(block["transactions"], block["previous_hash"], nonce=block["nonce"], timestamp=block["timestamp"]) for
-            block in data]
-
-        # Compare the length of the received blockchain with the local blockchain
-        if len(received_blockchain) > len(self.blockchain):
-            # If the received blockchain is longer, update the local blockchain
-            self.blockchain = received_blockchain
-            self._update_utxos_from_blockchain()
-
-    def _handle_incoming_utxos_request(self, payload, addr):
-        address = payload.get("data")
-        # Find the UTXOs that belong to the miner and have not been spent
-        utxos = {utxo_id: utxo for utxo_id, utxo in self.utxos.items() if
-                           utxo["locking_script"] == self.generate_locking_script(address)}
-        self._send(utxos, 'utxos_response', receiver=tuple(payload.get('sender')))
+        Node.print(f"Node {self.node_name} made a blockchain update request.")
 
     def _update_utxos_from_blockchain(self):
         # Clear the current UTXOs and rebuild them from the updated blockchain
         self.utxos = {}
         for block in self.blockchain:
-            for tx in block.transactions:
+            for tx in block.merkle_tree.transactions:
                 tx_hash = tx.hash()
                 for i, tx_output in enumerate(tx.outputs):
                     self.utxos[f"{tx_hash}:{i}"] = tx_output

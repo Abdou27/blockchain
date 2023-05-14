@@ -81,3 +81,5 @@ class Wallet(Node):
 
         for utxo in utxos_to_add:
             self.utxos[f"{tx.hash()}:1"] = utxo
+
+        return tx
