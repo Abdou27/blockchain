@@ -7,34 +7,65 @@ from Transaction import Transaction
 
 
 class Wallet(Node):
+    """
+    A class that represents a cryptocurrency wallet, which is used to store and manage cryptocurrency balances and to
+    send and receive transactions.
+    """
     def __init__(self, **options):
+        """
+        Constructor method that initializes a new instance of the Wallet class with the given options.
+        """
         super().__init__(**options)
         self.utxos = {}
         self.utxos_condition = threading.Condition()
 
     def _handle_incoming_data(self, payload, addr):
+        """
+        Overrides the _handle_incoming_data method of the parent Node class to handle incoming data from other nodes in
+        the network.
+        """
         super()._handle_incoming_data(payload, addr)
 
     def _handle_incoming_utxos_response(self, payload, addr):
+        """
+        A method that is called when a response to a request for unspent transaction outputs (UTXOs) is received from
+        a Miner.
+        """
         with self.utxos_condition:
             self.utxos = payload.get("data")
             self.utxos_condition.notify()
 
     def _request_utxos(self):
+        """
+        A method that sends a request to the network for the wallet's UTXOs.
+        """
         self._send(self.address, 'utxos_request')
 
     def refresh_balance(self):
+        """
+        A method that updates the wallet's balance by requesting and waiting for the UTXOs from the network.
+        """
         with self.utxos_condition:
             self._request_utxos()
             self.utxos_condition.wait()
 
     def get_balance(self):
+        """
+        A method that calculates and returns the total balance of the wallet based on the UTXOs currently held.
+        """
         total_input_value = 0
         for utxo_id, utxo in self.utxos.items():
             total_input_value += utxo["amount"]
         return total_input_value
 
     def send_crypto(self, receiver_address, amount):
+        """
+        A method that sends a cryptocurrency transaction from the wallet to a specified receiver address. It selects the
+        necessary UTXOs to cover the transaction amount, generates the inputs and outputs for the transaction, signs the
+        transaction using the wallet's private key, creates and sends the transaction to the network, and updates the
+        utxos dictionary of the wallet with any new UTXOs that were created as change outputs. If the wallet has
+        insufficient balance, the method returns None. It returns the created transaction on success.
+        """
         inputs = []
         outputs = []
         total_input_value = 0
