@@ -18,11 +18,11 @@ def test_exercise_1():
     print("Here we test if the nodes know about each other when connecting to the network.")
 
     # Start up the nodes
-    n1 = Node(port=8000, logging_level=logging_level).listen()
+    n1 = Node(node_name="1", logging_level=logging_level)
     time.sleep(1)
-    n2 = Node(port=8001, known_nodes={n1.id()}, logging_level=logging_level).listen()
+    n2 = Node(node_name="2", known_nodes={n1.id()}, logging_level=logging_level)
     time.sleep(1)
-    n3 = Node(port=8002, known_nodes={n1.id()}, logging_level=logging_level).listen()
+    n3 = Node(node_name="3", known_nodes={n1.id()}, logging_level=logging_level)
     time.sleep(1)
 
     # Test that each node knows about the other two nodes
@@ -106,7 +106,7 @@ def test_exercise_3():
 
 def test_exercise_4():
     print("Starting E4 tests :")
-    print("Here we test if the miners can mine a block and inform the others about it.")
+    print("Here we test if the transactions are properly processed.")
 
     # Set up the nodes
     miner_1 = Miner(node_name="Miner 1", logging_level=logging_level)
@@ -192,7 +192,7 @@ def test_exercise_4():
 
 def test_exercise_5():
     print("Starting E5 tests :")
-    print("Here we test if the miners can mine a block and inform the others about it.")
+    print("Here we test if the merkle tree can provide valid proofs after a transaction.")
 
     # Set up the nodes
     miner_1 = Miner(node_name="Miner 1", logging_level=logging_level)
