@@ -61,7 +61,7 @@ class Node:
             threading.Thread(target=self._accept_connections, daemon=True).start()
         return self
 
-    def _send(self, data, data_type, receiver=None, sender=None, data_hash=None, timestamp=None):
+    def _send(self, data, data_type, receiver=None, sender=None, sender_name=None, data_hash=None, timestamp=None):
         """
         Constructs a payload from the given data, data_type, sender, receiver, data_hash, and timestamp.
         Calculates the hash of the payload and adds it to the hash_history set.
@@ -79,11 +79,12 @@ class Node:
             timestamp = time.time_ns()
         if sender is None:
             sender = self.id()
-        payload_hash = hashlib.sha256(repr(
-            (data_type, data, sender, receiver, timestamp)).encode()).hexdigest() if data_hash is None else data_hash
+            sender_name = self.node_name
+        payload_repr = repr((data_type, data, sender, sender_name, receiver, timestamp))
+        payload_hash = hashlib.sha256(payload_repr.encode()).hexdigest() if data_hash is None else data_hash
         self.hash_history.add(payload_hash)
-        payload = {"hash": payload_hash, "type": data_type, "sender": sender, "sent_at": timestamp,
-                   "receiver": receiver, "data": data}
+        payload = {"hash": payload_hash, "type": data_type, "sender": sender, "sender_name": sender_name,
+                   "sent_at": timestamp, "receiver": receiver, "data": data}
         payload = json.dumps(payload)
         payload = payload.encode()
         with self.lock:
@@ -169,6 +170,7 @@ class Node:
             # Extract relevant data from payload
             data_type = payload.get("type")
             sender = payload.get("sender")
+            sender_name = payload.get("sender_name")
             receiver = payload.get("receiver")
             data_hash = payload.get("hash")
             timestamp = payload.get("sent_at")
@@ -180,8 +182,8 @@ class Node:
             self.hash_history.add(data_hash)
             # Check if data is intended for another node in the network, and forward it accordingly
             if receiver is not None and tuple(receiver) != self.id():
-                self._send(data, data_type, receiver=tuple(receiver), sender=tuple(sender), data_hash=data_hash,
-                           timestamp=timestamp)
+                self._send(data, data_type, receiver=tuple(receiver), sender=tuple(sender), sender_name=sender_name,
+                           data_hash=data_hash, timestamp=timestamp)
                 return
             if self.logging_level >= 2:
                 Node.print(f"Node {self.node_name} received valid payload from {addr} : {payload}.")
