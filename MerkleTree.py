@@ -75,7 +75,7 @@ class MerkleTree:
             for i in range(0, len(tree_leaves), 2):
                 if i < len(tree_leaves) - 1:
                     # Two sub-nodes
-                    h = self.hash_nodes(tree_leaves[i].hash, tree_leaves[i + 1].hash)
+                    h = self._hash_nodes(tree_leaves[i].hash, tree_leaves[i + 1].hash)
                     new_tree_leaves.append(MerkleTreeNode(h, level, tree_leaves[i], tree_leaves[i + 1]))
                 else:
                     # Lone node
@@ -121,7 +121,7 @@ class MerkleTree:
         self.build_tree()
 
     @staticmethod
-    def hash_nodes(left, right):
+    def _hash_nodes(left, right):
         """
         Computes the hash of two Merkle Tree nodes.
 
@@ -175,7 +175,7 @@ class MerkleTree:
         """
         current_hash = tx_hash
         for next_hash in proof:
-            current_hash = self.hash_nodes(current_hash, next_hash)
+            current_hash = self._hash_nodes(current_hash, next_hash)
         return current_hash == self.tree_root.hash
 
     def _find_node(self, node, tx_hash):

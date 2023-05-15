@@ -186,7 +186,7 @@ class Miner(Node):
             self.blockchain = received_blockchain
             self.transaction_pool = received_transactions
             self._update_utxos_from_blockchain()
-            Node.print(f"Node {self.node_name} updated it's blockchain from another node.")
+            Node.print(f"Node {self.node_name} updated it's blockchain from {payload['sender_name']}.")
         self.stop_mining = False
 
     def _handle_incoming_utxos_request(self, payload, addr):
@@ -250,7 +250,6 @@ class Miner(Node):
         # Broadcast a request for the latest blockchain
         self.stop_mining = True
         self._send(self.id(), "request_blockchain", receiver=receiver)
-        Node.print(f"Node {self.node_name} made a blockchain update request.")
 
     def _update_utxos_from_blockchain(self):
         """
