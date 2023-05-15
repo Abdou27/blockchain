@@ -15,7 +15,7 @@ Ce projet est une implémentation simple d'une blockchain en Python. Il comprend
 - Gestion d'un arbre de Merkle pour les transactions dans un bloc
 - Portefeuilles pour la gestion des soldes et des transactions des utilisateurs
 - Algorithme de preuve de travail pour la validation des blocs
-- Particularité d'implémentation : utilisation du timestamp au nanoseconde près au lieu d'un nonce séquentiel ordinaire. Grâce à cette méthode, il est plus facile de vérifier l'instant précis de la fin du minage d'un bloc, ce qui est très utile pour gérer les conflits entre les nœuds.
+- Particularité d'implémentation : utilisation du timestamp à la nanoseconde près au lieu d'un nonce séquentiel ordinaire. Grâce à cette méthode, il est plus facile de vérifier l'instant précis de la fin du minage d'un bloc, ce qui est très utile pour gérer les conflits entre les nœuds.
 
 
 ## Comment utiliser
